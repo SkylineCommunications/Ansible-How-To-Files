@@ -1,0 +1,89 @@
+---
+- name: DataMiner provisioning
+  hosts: DataMiner
+  become: false
+  vars:
+    serverjson: "https://thibault.skyline.local/API/v1/json.asmx"
+    connect: "/ConnectApp"
+    deleteView: "/DeleteView"
+    deleteElement: "/DeleteElement"
+    elementByName: "/GetElementByName"
+    viewByName: "/GetViewByName"
+    jsoncontent: "application/json"
+    dmaid: [yourDataMinerID]
+  tasks:
+    - debug:
+        msg: "Get Connection string"
+    - name: Connect With DataMiner
+      ansible.windows.win_uri:
+        url: "{{serverjson}}{{connect}}"
+        return_content: yes
+        content_type: "{{jsoncontent}}"
+        url_method: POST
+        body: '{
+            "host": "{{server}}",
+            "login": "[Insert DataMiner User]",
+            "password": "[Inser Password of DataMiner User]",
+            "clientAppName": "[Name for your connection]",
+            "clientAppVersion": "1.0",
+            "clientComputerName": "[Client Computer Name]]"
+            }'
+      register: connectionid
+    - name: GetElementByName
+      ansible.windows.win_uri:
+        url: "{{jsonServer}}{{elementByName}}"
+        return_content: yes
+        content_type: "{{jsoncontent}}"
+        url_method: POST
+        body: '{
+          "connection": "{{connectionid.json.d}}",
+          "elementName": "MS Platform"
+          }'
+      register: elementInfo
+    - name: Parse json
+      set_fact:
+        parsed_json: "{{elementInfo.content | from_json}}"
+    - name: Extract ID
+      set_fact:
+        ElementID: "{{parsed_json.d.ID | to_json}}"
+    - name: Delete Element
+      ansible.windows.win_uri:
+        url: "{{jsonServer}}{{deleteElement}}"
+        return_content: yes
+        content_type: "{{jsoncontent}}"
+        url_method: POST
+        body: '{
+          "connection": "{{connectionid.json.d}}",
+          "dmaID": "{{dmaid}}",
+          "elementID": "{{ElementID | int}}"
+          }'
+    - name: GetViewByName
+      ansible.windows.win_uri:
+        url: "{{jsonServer}}{{viewByName}}"
+        return_content: yes
+        content_type: "{{jsoncontent}}"
+        url_method: POST
+        body: '{
+          "connection": "{{connectionid.json.d}}",
+          "viewName": "AnsibleDemoView"
+          }'
+      register: viewInfo
+    - name: Parse json
+      set_fact:
+        parsed_json: "{{viewInfo.content | from_json}}"
+    - name: Extract viewID
+      set_fact:
+        viewID: "{{parsed_json.d.ID | to_json}}"      
+    - name: Delete View
+      ansible.windows.win_uri:
+        url: "{{jsonServer}}{{deleteView}}"
+        return_content: yes
+        content_type: "{{jsoncontent}}"
+        url_method: POST
+        body: '{
+          "connection": "{{connectionid.json.d}}",
+          "viewID": "{{viewID | int}}"
+          }'
+
+
+

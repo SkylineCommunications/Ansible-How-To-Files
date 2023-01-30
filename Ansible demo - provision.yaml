@@ -1,0 +1,143 @@
+---
+- name: DataMiner provisioning
+  hosts: DataMiner
+  vars:
+    serverjson: "https://[yourSkylineServer]]/API/v1/json.asmx"
+    serversoap: "https://[yourSkylineServer]]/API/v1/soap.asmx"
+    connect: "/ConnectApp"
+    createview: "/CreateView"
+    createelement: "/CreateElement"
+    setparameter: "/SetParameter"
+    jsoncontent: "application/json"
+    soapcontent: "text/xml"
+    dmaid: [yourDataMinerID]
+  tasks:
+    - debug:
+        msg: "Get Connection string"
+    - name: Connect With DataMiner
+      ansible.windows.win_uri:
+        url: "{{serverjson}}{{connect}}"
+        return_content: yes
+        content_type: "{{jsoncontent}}"
+        url_method: POST
+        body: '{
+            "host": "{{server}}",
+            "login": "[Insert DataMiner User]",
+            "password": "[Inser Password of DataMiner User]",
+            "clientAppName": "[Name for your connection]",
+            "clientAppVersion": "1.0",
+            "clientComputerName": "[Client Computer Name]]"
+            }'
+      register: connectionid
+    - name: CreateView
+      ansible.windows.win_uri:
+        url: "{{serverjson}}{{createview}}"
+        return_content: yes
+        content_type: "{{jsoncontent}}"
+        url_method: POST
+        body: '{
+          "connection": "{{connectionid.json.d}}",
+          "parentViewID": -1,
+          "viewName": "AnsibleDemoView"
+          }'
+      register: ansibleView
+    - debug:
+        msg: "Create Element"
+    - name: CreateElementUsingSOAP
+      ansible.windows.win_uri:
+        url: "{{serversoap}}"
+        return_content: yes
+        content_type: "{{soapcontent}}"
+        url_method: POST
+        body: '<soap:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
+        <soap:Body>
+            <CreateElement xmlns="http://www.skyline.be/api/v1">
+                <connection>{{connectionid.json.d}}</connection>
+                <dmaID>{{dmaid}}}}</dmaID>
+                <viewIDs>
+                    <int>{{ansibleView.json.d}}</int>
+                </viewIDs>
+                <configuration>
+                    <Name>MS Platform</Name>
+                    <ProtocolName>Microsoft Platform</ProtocolName>
+                    <ProtocolVersion>1.1.0.99</ProtocolVersion>
+                    <Ports>
+                        <DMAElementBasePortInfo xsi:type="DMAElementSerialPortInfo">
+                            <IPAddress>localhost</IPAddress>
+                            <TimeoutTime>60</TimeoutTime>
+                            <ElementTimeoutTime>30</ElementTimeoutTime>
+                        </DMAElementBasePortInfo>
+                    </Ports>
+                </configuration>
+            </CreateElement>
+        </soap:Body>
+    </soap:Envelope>'
+    - name: GetElementByName
+      ansible.windows.win_uri:
+        url: "{{server}}{{elementbyname}}"
+        return_content: yes
+        content_type: "{{jsoncontent}}"
+        url_method: POST
+        body: '{
+          "connection": "{{connectionid.json.d}}",
+          "elementName": "MS Platform"
+          }'
+      register: elementInfo
+    - name: Parse json
+      set_fact:
+        parsed_json: "{{elementInfo.content | from_json}}"
+    - name: Extract ID
+      set_fact:
+        ID: "{{parsed_json.d.ID | to_json}}"
+    - name: Print ID
+      debug:
+        msg: "{{ID}}"
+    - name: AssignAlarmTemplate
+      ansible.windows.win_uri:
+        url: "{{server}}{{assignAlarmTemplate}}"
+        content_type: "{{jsoncontent}}"
+        url_method: POST
+        body: '{
+          "connection": "{{connectionid.json.d}}",
+          "elements": [{
+            "DataMinerID": "{{dataminerID}}",
+            "ID": "{{ID}}"
+            }],
+          "protocolName": "Microsoft Platform",
+          "protocolVersion": "1.1.0.99",
+          "templateName": "AlarmTemplate"
+          }'
+    - name:
+      ansible.windows.win_uri:
+        url: "{{soapServer}}"
+        return_content: yes
+        content_type: "{{soapContent}}"
+        url_method: POST
+        body: '<soap:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
+        <soap:Body>
+        <AddVisioFileToProtocol xmlns="http://www.skyline.be/api/v1">
+            <connection>{{connectionid.json.d}}</connection>
+            <protocolName>Microsoft Platform</protocolName>
+            <visioFileName>Microsoft Platform.vdx</visioFileName>
+            <visio>[Encoded Visio file to Base64]</visio>
+        </AddVisioFileToProtocol>
+        </soap:Body>
+        </soap:Envelope>'
+     - name:
+      ansible.windows.win_uri:
+        url: "{{soapServer}}"
+        return_content: yes
+        content_type: "{{soapContent}}"
+        url_method: POST
+        body: '<soap:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
+        <soap:Body>
+        <AssignVisioFileToProtocol xmlns="http://www.skyline.be/api/v1">
+            <connection>{{connectionid.json.d}}</connection>
+            <protocolName>Microsoft Platform</protocolName>
+            <visioFileName>Microsoft Platform.vdx</visioFileName>
+            <defaultPageID>0</defaultPageID>
+        </AssignVisioFileToProtocol>
+        </soap:Body>
+        </soap:Envelope>'
+
+
